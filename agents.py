@@ -15,10 +15,18 @@ class MainAgent:
 
         dataset_gen_agent = DatasetGenerationAgent(formatted_query=formatted_query, model=self.model)
         script = dataset_gen_agent.generate()
+
+        print(f"Script : {script}")
         
         exec_agent = ScriptExecutionAgent(script)
         output = exec_agent.execute()
-        return output
+        viz_agent = VizAgent(model=self.model, dataset_path="generated_dataset.csv")
+        viz_script = viz_agent.generate_viz_script()
+        viz_exec = ScriptExecutionAgent(viz_script)
+        viz_output = viz_exec.execute()
+
+
+        return output, viz_output
 
 class FormattingAgent:
   
@@ -34,7 +42,7 @@ class FormattingAgent:
 
                 Given the user's request, produce:
 
-                1) **Dataset Name:** A concise, descriptive name.  
+                1) **Dataset Name:** : Must be generated_dataset.csv
                 2) **Number of Rows:** Infer or ask for the quantity of data (default to 1000 rows if unspecified).  
                 3) **Columns Specification:** For each column, define:
                 - Column Name
@@ -76,7 +84,8 @@ class DatasetGenerationAgent:
                 - Generate realistic data respecting the column types, constraints, and relationships
                 - Use randomization, but follow constraints (e.g., value ranges, unique values where required)
                 - Handle any correlations or dependencies between columns as noted
-                - Save the dataset as a CSV file (e.g., 'generated_dataset.csv')
+                - Use significant coefficients for scalars to ensure significant correlations.
+                - Save the dataset as a CSV file called generated_dataset.csv
                 - Include no extra explanations, just the code
 
                 ---
@@ -162,3 +171,38 @@ class ScriptExecutionAgent:
         finally:
             # Optionally remove the temp file
             os.remove(script_path)
+
+
+class VizAgent:
+    def __init__(self, model, dataset_path="generated_dataset.csv"):
+        import pandas as pd
+        self.model = model
+        self.dataset_path = dataset_path
+        self.df = pd.read_csv(self.dataset_path)
+        self.example = self.df.iloc[4]
+        self.columns = self.df.columns
+
+
+
+    def generate_viz_script(self):
+        prompt = f"""
+        You are a data visualization agent. Your job is to generate a complete Python script that:
+        
+        1️⃣ Loads the CSV dataset from the path: "{self.dataset_path}"  
+        2️⃣ Creates a folder called "visualizations_current_date_time". the current date time part is dynamic, and you should find out what the current date and time is.
+        3️⃣ Generates meaningful plots for all columns (e.g., histograms, scatterplots, boxplots, correlations where appropriate)  
+        4️⃣ Saves each plot as a PNG in the "visualizations" folder, with clear filenames  
+        5️⃣ Uses libraries like pandas, matplotlib, seaborn  
+        6️⃣ Keeps the code clean, modular, and executable
+
+        Information:
+        1) Dataset columns : {self.columns}
+        2) A row from the dataset for reference : {self.example}
+
+
+        Output only the Python code without code fences or extra commentary.
+        """
+
+        response = self.model.generate_content(prompt)
+        return response.text
+
